@@ -83,7 +83,11 @@ def demographics():
 def prepare_features(data):
     age = np.array(data.Age)
     age_mask = ~np.isnan(age)
-    age[~age_mask] = -100
+    age[~age_mask] = -1
+    # age[np.logical_and(age >= 0, age < 18)] = 0
+    # age[np.logical_and(age >= 18, age < 30)] = 1
+    # age[np.logical_and(age >= 30, age <= 65)] = 2
+    # age[age >= 65] = 1
 
     sex = np.array(data.Sex)
     sex[sex == 'male'] = 0
@@ -99,14 +103,13 @@ def prepare_features(data):
     names = data.Name.str.split('[,.] ')
     titles = [name[1] for name in names.values]
 
-
     for i, title in enumerate(titles):
-        if title in ("Major", "Col", "Capt"):
-            titles[i] = "Major"
-        elif title in ("Mlle", "Mme", "Lady", "the Countess"):
-            titles[i] = "Lady"
-        elif title in ("Don", "Sir", "Jonkheer", "Rev"):
-            titles[i] = "Sir"
+        if title in ("Mlle", "Mme"):
+            titles[i] = "Mme"
+        elif title == "Ms":
+            titles[i] = "Miss"
+        elif title in ("Don", "Sir", "Jonkheer", "Rev", "Major", "Col", "Capt", "Lady", "the Countess"):
+            titles[i] = "Rare"
 
     titles = LabelEncoder().fit_transform(titles)
 
@@ -131,21 +134,22 @@ def prepare_features(data):
     embark = embark.astype(np.float32)
     embark[np.isnan(embark)] = -1
 
-    return np.array([sex, titles, fare, cls, age, family_size], np.float32).T
+    return np.array([sex, titles, fare, cls, room, family_size], np.float32).T
 
-from sklearn import tree, ensemble
+from sklearn import tree, ensemble, svm
 from sklearn.model_selection import cross_val_score
 
 data = prepare_features(train_set)
 labels = train_set.Survived
 
-clf = tree.DecisionTreeClassifier(max_depth=5)
-scores = cross_val_score(clf, data, labels, cv=10)
-print("Decision Tree : Accuracy: {:3.5f} (+/- {:3.2f})".format(scores.mean(), scores.std() * 2))
 
-clf = ensemble.RandomForestClassifier(1000, max_depth=5, min_samples_split=10, min_samples_leaf=5, class_weight='balanced')
-scores = cross_val_score(clf, data, labels, cv=10)
-print("Random Forest : Accuracy: {:3.5f} (+/- {:3.2f})".format(scores.mean(), scores.std() * 2))
+clf = tree.DecisionTreeClassifier(max_depth=5)
+scores = cross_val_score(clf, data, labels, cv=4)
+print("Decision Tree          : Accuracy: {:3.5f} (+/- {:3.2f})".format(scores.mean(), scores.std() * 2))
+
+# clf = ensemble.RandomForestClassifier(1000, max_depth=6, min_samples_leaf=0.01, min_samples_split=0.03, class_weight='balanced')
+# scores = cross_val_score(clf, data, labels, cv=5)
+# print("Random Forest          : Accuracy: {:3.5f} (+/- {:3.2f})".format(scores.mean(), scores.std() * 2))
 
 clf.fit(data, labels)
 test_set = pd.read_csv(TEST)
@@ -155,10 +159,7 @@ submission = pd.DataFrame({"PassengerId": test_set["PassengerId"], "Survived": p
 submission.to_csv(os.path.join(ROOT, 'submission.csv'), index=False)
 
 # predictors = [
-#     "Age", "Sex", "Class", "Fare",
-#     "Parents/Children", "Siblings/Spouses", "Family Size",
-#     "Title",
-#     "Deck", "Room", "Embark"
+#     "Sex", "Title", "Fare", "Class", "Family Size",
 # ]
 #
 # clf.fit(data, labels)
